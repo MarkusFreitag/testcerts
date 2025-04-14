@@ -92,16 +92,46 @@ type KeyPair struct {
 	privateKey *pem.Block
 }
 
+type CAOption func(*caOptions)
+
+func WithPrivateKey(key *ecdsa.PrivateKey) CAOption {
+	return func(o *caOptions) {
+		o.privateKey = key
+	}
+}
+
+func WithTimeRange(from, until time.Time) CAOption {
+	return func(o *caOptions) {
+		o.notBefore = from
+		o.notAfter = until
+	}
+}
+
+type caOptions struct {
+	privateKey *ecdsa.PrivateKey
+
+	notBefore time.Time
+	notAfter  time.Time
+}
+
 // NewCA creates a new CertificateAuthority.
-func NewCA() *CertificateAuthority {
+func NewCA(opts ...CAOption) *CertificateAuthority {
+	options := caOptions{
+		notBefore: time.Now().Add(-1 * time.Hour),
+		notAfter:  time.Now().Add(2 * time.Hour),
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	// Create a Certificate Authority Cert
 	ca := &CertificateAuthority{cert: &x509.Certificate{
 		Subject: pkix.Name{
 			Organization: []string{"Never Use this Certificate in Production Inc."},
 		},
 		SerialNumber:          big.NewInt(42),
-		NotBefore:             time.Now().Add(-1 * time.Hour),
-		NotAfter:              time.Now().Add(2 * time.Hour),
+		NotBefore:             options.notBefore,
+		NotAfter:              options.notAfter,
 		IsCA:                  true,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
@@ -110,7 +140,7 @@ func NewCA() *CertificateAuthority {
 
 	var err error
 	// Generate KeyPair
-	ca.publicKey, ca.privateKeyEcdsa, err = genSelfSignedKeyPair(ca.cert)
+	ca.publicKey, ca.privateKeyEcdsa, err = genSelfSignedKeyPair(ca.cert, options.privateKey)
 	if err != nil {
 		// Should never error, but just incase
 		return ca
@@ -357,11 +387,14 @@ func (kp *KeyPair) ConfigureTLSConfig(tlsConfig *tls.Config) (*tls.Config, error
 }
 
 // genSelfSignedKeyPair will generate a key and self-signed certificate from the provided Certificate.
-func genSelfSignedKeyPair(cert *x509.Certificate) (*pem.Block, *ecdsa.PrivateKey, error) {
+func genSelfSignedKeyPair(cert *x509.Certificate, key *ecdsa.PrivateKey) (*pem.Block, *ecdsa.PrivateKey, error) {
 	// Create a Private Key
-	key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not generate rsa key - %w", err)
+	if key == nil {
+		var err error
+		key, err = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not generate rsa key - %w", err)
+		}
 	}
 
 	// Use CA Cert to sign and create a Public Cert
