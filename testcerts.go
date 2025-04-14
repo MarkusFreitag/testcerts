@@ -107,11 +107,19 @@ func WithTimeRange(from, until time.Time) CAOption {
 	}
 }
 
+func WithCertFunc(fn func(*x509.Certificate)) CAOption {
+	return func(o *caOptions) {
+		o.certFuncs = append(o.certFuncs, fn)
+	}
+}
+
 type caOptions struct {
 	privateKey *ecdsa.PrivateKey
 
 	notBefore time.Time
 	notAfter  time.Time
+
+	certFuncs []func(*x509.Certificate)
 }
 
 // NewCA creates a new CertificateAuthority.
@@ -119,13 +127,14 @@ func NewCA(opts ...CAOption) *CertificateAuthority {
 	options := caOptions{
 		notBefore: time.Now().Add(-1 * time.Hour),
 		notAfter:  time.Now().Add(2 * time.Hour),
+
+		certFuncs: make([]func(*x509.Certificate), 0),
 	}
 	for _, opt := range opts {
 		opt(&options)
 	}
 
-	// Create a Certificate Authority Cert
-	ca := &CertificateAuthority{cert: &x509.Certificate{
+	cert := &x509.Certificate{
 		Subject: pkix.Name{
 			Organization: []string{"Never Use this Certificate in Production Inc."},
 		},
@@ -136,7 +145,14 @@ func NewCA(opts ...CAOption) *CertificateAuthority {
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
-	}}
+	}
+
+	for _, fn := range options.certFuncs {
+		fn(cert)
+	}
+
+	// Create a Certificate Authority Cert
+	ca := &CertificateAuthority{cert: cert}
 
 	var err error
 	// Generate KeyPair
