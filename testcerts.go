@@ -205,9 +205,18 @@ func (ca *CertificateAuthority) NewKeyPairFromConfig(config KeyPairConfig) (*Key
 	}
 
 	// If a serial number is provided, use it, otherwise use 42
-	serialNumber := config.SerialNumber
-	if serialNumber == nil {
-		serialNumber = big.NewInt(42)
+	if config.SerialNumber == nil {
+		config.SerialNumber = big.NewInt(42)
+	}
+
+	var zeroTime time.Time
+
+	if config.NotBefore == zeroTime {
+		config.NotBefore = time.Now().Add(-1 * time.Hour)
+	}
+
+	if config.NotAfter == zeroTime {
+		config.NotAfter = time.Now().Add(2 * time.Hour)
 	}
 
 	// Create a Certificate
@@ -218,9 +227,9 @@ func (ca *CertificateAuthority) NewKeyPairFromConfig(config KeyPairConfig) (*Key
 		},
 		DNSNames:     config.Domains,
 		IPAddresses:  ips,
-		SerialNumber: serialNumber,
-		NotBefore:    time.Now().Add(-1 * time.Hour),
-		NotAfter:     time.Now().Add(2 * time.Hour),
+		SerialNumber: config.SerialNumber,
+		NotBefore:    config.NotBefore,
+		NotAfter:     config.NotAfter,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}}

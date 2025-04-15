@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math/big"
 	"net"
+	"time"
 )
 
 var (
@@ -29,6 +30,9 @@ type KeyPairConfig struct {
 
 	// CommonName is the Common Name to use for the certificate.
 	CommonName string
+
+	NotBefore time.Time
+	NotAfter  time.Time
 }
 
 // Validate validates the KeyPairConfig ensuring that it is not empty and that
